@@ -1,0 +1,12 @@
+1. Objective and use case
+You want to manage a personal knowledge base in Obsidian primarily through your voice while on the go. From your phone, you send a voice message — something like "add a note about the meeting with Carlos, we agreed to launch in April" or "what did I write about the marketing budget?" — and the system creates, updates, or retrieves notes in your vault automatically. You get a text reply back confirming what was done or showing you what it found.
+When you're at your computer, you open Obsidian to browse, read, and explore your notes visually. You don't need to manage anything — the content is already there, synced and up to date. If you ever do edit from desktop, a quick git push makes it available to the bot too.
+The result is a voice-first, phone-first workflow for capturing and querying knowledge, with Obsidian on desktop as your rich reading and exploration layer.
+2. Interacting components
+Telegram — your mobile interface. You send voice messages to a bot. It's the only app you need on your phone for this workflow.
+Telegram bot (on DigitalOcean droplet) — the orchestrator. It receives voice messages, downloads the audio, sends it to Whisper for transcription, then passes the transcribed text to an LLM API with instructions about what vault operations are available.
+Whisper API (OpenAI) — transcribes your voice messages to text. Could also be replaced with a local whisper.cpp instance on the droplet if you want to avoid external API calls for this step.
+LLM API (Claude, Gemini, or OpenAI) — the brain. It reads your transcribed message, decides what to do (create a note? search? append to an existing note?), and returns structured tool calls. It doesn't touch the vault directly — it just decides.
+mcp-obsidian (on the droplet) — the vault interface. Runs as a subprocess. The bot sends it commands like "write this note" or "search for X" over stdio using the MCP protocol. It handles all file operations safely — frontmatter parsing, path security, search, tag management.
+Git + GitHub (private repo) — the sync layer. The vault lives as a cloned repo on the droplet. The bot pulls before reads and pushes after writes. GitHub is the single source of truth that connects the droplet and your desktop.
+Obsidian on desktop — your reading and exploration tool. It opens the same vault cloned from the same repo. A git pull gives you the latest content, including everything the bot added from your voice messages.
