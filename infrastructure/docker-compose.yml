@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  bot:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: talkvault-bot
+    restart: unless-stopped
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - VAULT_REPO_PATH=/app/vault
+      - FLOW_DETECT_NOTE_GROUP=${FLOW_DETECT_NOTE_GROUP:-guess}
+      - FLOW_DETECT_ENTITIES=${FLOW_DETECT_ENTITIES:-ask}
+      - SESSION_TIMEOUT=${SESSION_TIMEOUT:-600}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ../bot:/app/bot  # Hot-reload in dev
+      - ${VAULT_REPO_PATH:-./vault}:/app/vault
+    command: python -m bot.main
+
+networks:
+  default:
+    driver: bridge

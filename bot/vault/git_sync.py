@@ -45,7 +45,8 @@ def push(vault_path: str) -> None:
         _run(["git", "push"], cwd=vault_path)
         logger.info("vault: pushed to remote")
     except RuntimeError as e:
-        if "no remote" in str(e).lower() or "does not appear to be a git repository" in str(e):
+        err = str(e).lower()
+        if "no remote" in err or "does not appear to be a git repository" in err or "no configured push destination" in err:
             logger.debug("vault: no remote, skipping push")
         else:
             raise

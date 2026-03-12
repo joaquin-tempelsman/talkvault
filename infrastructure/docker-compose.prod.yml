@@ -1,0 +1,11 @@
+# Production override
+version: '3.8'
+
+services:
+  bot:
+    restart: always
+    environment:
+      - ENVIRONMENT=production
+    volumes:
+      - ${VAULT_REPO_PATH:-/opt/talkvault/vault}:/app/vault
+      # No source mount in production

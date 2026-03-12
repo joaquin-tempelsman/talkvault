@@ -8,3 +8,5 @@ venv/
 dist/
 *.log
 .DS_Store
+vault/
+uv.lock

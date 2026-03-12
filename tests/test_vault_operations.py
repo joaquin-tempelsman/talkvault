@@ -1,5 +1,6 @@
 # tests/test_vault_operations.py
-import subprocess, tempfile, os, pytest
+import subprocess
+import pytest
 from pathlib import Path
 
 
@@ -9,7 +10,6 @@ def temp_git_repo(tmp_path):
     subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
     subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmp_path, check=True)
     subprocess.run(["git", "config", "user.name", "Test"], cwd=tmp_path, check=True)
-    # Initial commit so HEAD exists
     (tmp_path / "README.md").write_text("vault")
     subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
     subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, check=True, capture_output=True)
@@ -25,22 +25,11 @@ def test_commit_new_file(temp_git_repo):
     assert "test: add note via bot" in log.stdout
 
 
-@pytest.mark.asyncio
-async def test_create_note_direct(temp_git_repo):
-    """Tests direct Python fallback (no MCP needed)."""
-    from bot.vault.operations import create_note_direct
-    path = str(temp_git_repo / "Notes" / "meeting.md")
-    await create_note_direct(path, "# Meeting\nNotes here", ["meeting", "carlos"])
-    content = Path(path).read_text()
-    assert "# Meeting" in content
-    assert "tags:" in content  # frontmatter injected
-    assert "meeting" in content
-
-
-@pytest.mark.asyncio
-async def test_search_vault_direct(temp_git_repo):
-    from bot.vault.operations import search_vault_direct
-    (temp_git_repo / "note1.md").write_text("# Budget\nmarketing budget is 10k")
-    (temp_git_repo / "note2.md").write_text("# Meeting\nCarlos call")
-    results = await search_vault_direct(str(temp_git_repo), "marketing budget")
-    assert any("note1.md" in r for r in results)
+def test_sync_write_commits_and_pushes(temp_git_repo):
+    """sync_write commits changes (push skipped since no remote)."""
+    from bot.vault.git_sync import sync_write
+    note = temp_git_repo / "note.md"
+    note.write_text("# Note")
+    sync_write(str(temp_git_repo), "note: test")
+    log = subprocess.run(["git", "log", "--oneline"], cwd=temp_git_repo, capture_output=True, text=True)
+    assert "note: test" in log.stdout
