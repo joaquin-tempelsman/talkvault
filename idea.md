@@ -1,12 +1,90 @@
-1. Objective and use case
-You want to manage a personal knowledge base in Obsidian primarily through your voice while on the go. From your phone, you send a voice message — something like "add a note about the meeting with Carlos, we agreed to launch in April" or "what did I write about the marketing budget?" — and the system creates, updates, or retrieves notes in your vault automatically. You get a text reply back confirming what was done or showing you what it found.
-When you're at your computer, you open Obsidian to browse, read, and explore your notes visually. You don't need to manage anything — the content is already there, synced and up to date. If you ever do edit from desktop, a quick git push makes it available to the bot too.
-The result is a voice-first, phone-first workflow for capturing and querying knowledge, with Obsidian on desktop as your rich reading and exploration layer.
-2. Interacting components
-Telegram — your mobile interface. You send voice messages to a bot. It's the only app you need on your phone for this workflow.
-Telegram bot (on DigitalOcean droplet) — the orchestrator. It receives voice messages, downloads the audio, sends it to Whisper for transcription, then passes the transcribed text to an LLM API with instructions about what vault operations are available.
-Whisper API (OpenAI) — transcribes your voice messages to text. Could also be replaced with a local whisper.cpp instance on the droplet if you want to avoid external API calls for this step.
-LLM API (Claude, Gemini, or OpenAI) — the brain. It reads your transcribed message, decides what to do (create a note? search? append to an existing note?), and returns structured tool calls. It doesn't touch the vault directly — it just decides.
-mcp-obsidian (on the droplet) — the vault interface. Runs as a subprocess. The bot sends it commands like "write this note" or "search for X" over stdio using the MCP protocol. It handles all file operations safely — frontmatter parsing, path security, search, tag management.
-Git + GitHub (private repo) — the sync layer. The vault lives as a cloned repo on the droplet. The bot pulls before reads and pushes after writes. GitHub is the single source of truth that connects the droplet and your desktop.
-Obsidian on desktop — your reading and exploration tool. It opens the same vault cloned from the same repo. A git pull gives you the latest content, including everything the bot added from your voice messages.
+# TalkVault
+
+## Objective
+
+Voice-first personal knowledge base in Obsidian. Send voice or text messages via Telegram, and the system classifies, tags, and stores notes automatically. Browse from Obsidian on desktop — everything is synced via git.
+
+## Components
+
+- **Telegram** — mobile interface (voice + text)
+- **Telegram bot** (DigitalOcean) — orchestrator: transcribes audio (Whisper API), passes text to LLM agent
+- **LLM agent** (LangChain 1.0 + GPT-4o) — classifies messages, detects note groups and entities, confirms with user, saves notes
+- **Vault** (git repo) — Obsidian vault with structured `_meta/` registry for note groups and entity groups
+- **Git + GitHub** — sync layer. Bot pulls before reads, commits+pushes after writes. GitHub is single source of truth.
+- **Obsidian** (desktop) — reading and exploration layer
+
+## Core Concepts
+
+### Note Groups
+Categories for notes (e.g., Personal, Ideas, Work). Each note belongs to one group. Stored as `_meta/note_groups/{name}.md`. Each group has a corresponding vault folder.
+
+### Entity Groups
+Collections of entities connected to specific note groups (e.g., "friends" connected to Personal and Work). Stored as `_meta/entity_groups/{name}.md`.
+
+### Entities
+Individual items within entity groups (e.g., Carlos, Ana in "friends"). When a note mentions a known entity from a connected entity group, it gets tagged.
+
+## Message Flow
+
+A message is either a **command** or a **note**.
+
+### Commands
+Registry operations — execute and inform:
+- `add note group X` / `add note groups X, Y, Z`
+- `add entity group X connected to Y, Z`
+- `add entities A, B, C to entity group X`
+
+### Notes
+Processed through a configurable pipeline:
+
+1. **Detect note group** (mode: ask | guess) — agent reads available groups, picks best match
+2. **Detect entities** (mode: ask | guess) — agent loads entities from connected entity groups, scans note
+3. **Final review** (always) — agent presents summary: note group, entities, file path. User approves/modifies/cancels
+4. **Save** — write note with frontmatter, git commit + push
+
+Each step's mode is tunable:
+```python
+FLOW_CONFIG = {
+    "detect_note_group": "guess",
+    "detect_entities": "ask",
+}
+```
+
+## Vault Structure
+
+```
+vault/
+├── _meta/
+│   ├── note_groups/
+│   │   ├── personal.md
+│   │   └── work.md
+│   ├── entity_groups/
+│   │   ├── friends.md       # connected_note_groups: [Personal, Work], entities: [Carlos, Ana]
+│   │   └── places.md
+├── Personal/
+│   └── 2026-03-11-walk-in-park.md
+└── Work/
+    └── 2026-03-11-meeting-carlos.md
+```
+
+### Note Frontmatter
+
+```yaml
+---
+note_group: Personal
+entities:
+  - Carlos
+entity_groups:
+  - friends
+date: 2026-03-11
+---
+```
+
+## Technical Architecture
+
+- **Agent**: LangChain 1.0 `create_agent` with custom `@tool` functions (no MCP)
+- **Multi-turn**: LangGraph `interrupt()` / `Command(resume=...)` with `InMemorySaver` checkpointer
+- **Telegram**: Polling mode (no webhook/nginx needed)
+- **Infra**: Docker on DigitalOcean, CI/CD via GitHub Actions
+
+Full spec: `docs/superpowers/specs/2026-03-11-talkvault-v2-design.md`
